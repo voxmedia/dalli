@@ -344,16 +344,20 @@ module Dalli
     def ring
       @ring ||= Dalli::Ring.new(
         @servers.map do |s|
-         server_options = {}
-          if s =~ %r{\Amemcached://}
-            uri = URI.parse(s)
-            server_options[:username] = uri.user
-            server_options[:password] = uri.password
-            s = "#{uri.host}:#{uri.port}"
-          end
-          Dalli::Server.new(s, @options.merge(server_options))
+          Dalli::Server.new(*server_options(s))
         end, @options
       )
+    end
+
+    def server_options(s)
+      server_options = {}
+      if s =~ %r{\Amemcached://}
+        uri = URI.parse(s)
+        server_options[:username] = uri.user
+        server_options[:password] = uri.password
+        s = "#{uri.host}:#{uri.port}"
+      end
+      [s, @options.merge(server_options)]
     end
 
     # Chokepoint method for instrumentation
