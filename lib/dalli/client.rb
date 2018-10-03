@@ -29,11 +29,15 @@ module Dalli
     # - :serializer - defaults to Marshal
     # - :compressor - defaults to zlib
     # - :cache_nils - defaults to false, if true Dalli will not treat cached nil values as 'not found' for #fetch operations.
+    # - :servers_writeonly - same format as servers, but the servers in this Array will only be sent writes, not reads. Default: nil
+    #
     #
     def initialize(servers=nil, options={})
       @servers = normalize_servers(servers || ENV["MEMCACHE_SERVERS"] || '127.0.0.1:11211')
+      @servers_writeonly = normalize_servers_writeonly(options.delete(:servers_writeonly))
       @options = normalize_options(options)
       @ring = nil
+      @ring_writeonly = nil
     end
 
     #
@@ -336,12 +340,29 @@ module Dalli
       end
     end
 
+    def normalize_servers_writeonly(servers)
+      servers.blank? ? nil : normalize_servers(servers)
+    end
+
     def ring
       @ring ||= Dalli::Ring.new(
         @servers.map do |s|
           Dalli::Server.new(*server_options(s))
         end, @options
       )
+    end
+
+    def ring_writeonly
+      @ring_writeonly ||=
+        if @servers_writeonly.blank?
+          nil
+        else
+          Dalli::Ring.new(
+            @servers_writeonly.map do |s|
+              Dalli::Server.new(*server_options(s))
+            end, @options
+          )
+        end
     end
 
     def server_options(s)
@@ -365,12 +386,23 @@ module Dalli
       begin
         server = ring.server_for_key(key)
         ret = server.request(op, key, *args)
+        if ring_writeonly && ! is_read?(op)
+          begin
+            server = ring_writeonly.server_for_key(key)
+            server.request(op, key, *args)
+          rescue NetworkError => e
+            Dalli.logger.debug { "writeonly request raised #{e.inspect}, ignoring" }
+          end
         ret
       rescue NetworkError => e
         Dalli.logger.debug { e.inspect }
         Dalli.logger.debug { "retrying request with new server" }
         retry
       end
+    end
+
+    def is_read?(op)
+      [:get, :cas].includes?(op)
     end
 
     def validate_key(key)
