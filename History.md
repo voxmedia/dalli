@@ -1,6 +1,10 @@
 Dalli Changelog
 =====================
 
+2.7.9
+==========
+- writeonly ring
+
 2.7.8
 ==========
 - Rails 5.2 compatibility (pbougie)
