@@ -30,11 +30,13 @@ module Dalli
     # - :compressor - defaults to zlib
     # - :cache_nils - defaults to false, if true Dalli will not treat cached nil values as 'not found' for #fetch operations.
     # - :servers_writeonly - same format as servers, but the servers in this Array will only be sent writes, not reads. Default: nil
+    # - :fraction_writeonly - random chance (0-1) that a write will also be sent to servers_writeonly. Default: 1
     #
     #
     def initialize(servers=nil, options={})
       @servers = normalize_servers(servers || ENV["MEMCACHE_SERVERS"] || '127.0.0.1:11211')
-      @servers_writeonly = normalize_servers_writeonly(options.delete(:servers_writeonly))
+      @servers_writeonly  = normalize_servers_writeonly( options.delete(:servers_writeonly))
+      @fraction_writeonly = normalize_fraction_writeonly(options.delete(:fraction_writeonly))
       @options = normalize_options(options)
       @ring = nil
       @ring_writeonly = nil
@@ -349,6 +351,10 @@ module Dalli
       servers.blank? ? nil : normalize_servers(servers)
     end
 
+    def normalize_fraction_writeonly(fraction)
+      [[0.0, fraction.nil? ? 1.0 : fraction.to_f].max, 1.0].min
+    end
+
     def ring
       @ring ||= Dalli::Ring.new(
         @servers.map do |s|
@@ -391,7 +397,7 @@ module Dalli
       begin
         server = ring.server_for_key(key)
         ret = server.request(op, key, *args)
-        if ring_writeonly && ! is_read?(op)
+        if ring_writeonly && ! is_read?(op) && rand < @fraction_writeonly
           begin
             server = ring_writeonly.server_for_key(key)
             server.request(op, key, *args)
