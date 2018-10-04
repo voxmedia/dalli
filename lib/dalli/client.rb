@@ -393,6 +393,7 @@ module Dalli
           rescue NetworkError => e
             Dalli.logger.debug { "writeonly request raised #{e.inspect}, ignoring" }
           end
+        end
         ret
       rescue NetworkError => e
         Dalli.logger.debug { e.inspect }
