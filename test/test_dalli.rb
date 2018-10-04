@@ -113,6 +113,32 @@ describe 'Dalli' do
     assert_equal "server2.example.com", s2
   end
 
+  it "accept writeonly ring" do
+    dc = Dalli::Client.new("server1.example.com:11211",
+                           :servers_writeonly => "server2.example.com:11211,server3.example.com:11211")
+    ring = dc.send(:ring)
+    assert_equal 1, ring.servers.size
+    ring_writeonly = dc.send(:ring_writeonly)
+    assert_equal 2, ring_writeonly.servers.size
+    s1,s2 = ring_writeonly.servers.map(&:hostname)
+    assert_equal "server2.example.com", s1
+    assert_equal "server3.example.com", s2
+    options = dc.instance_variable_get('@options')
+    assert_equal({}, options)
+  end
+
+  it "accept writeonly fraction" do
+    dc = Dalli::Client.new("server1.example.com:11211",
+                           :fraction_writeonly => 0.5)
+    frac = dc.instance_variable_get('@fraction_writeonly')
+    assert_equal 0.5, frac
+    options = dc.instance_variable_get('@options')
+    assert_equal({}, options)
+    dc = Dalli::Client.new("server1.example.com:11211")
+    frac = dc.instance_variable_get('@fraction_writeonly')
+    assert_equal 1.0, frac
+  end
+
   describe 'using a live server' do
 
     it "support get/set" do
