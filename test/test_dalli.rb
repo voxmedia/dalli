@@ -158,6 +158,37 @@ describe 'Dalli' do
       end
     end
 
+    it "support get/set with writeonly servers" do
+      # Start up a second server for writeonly purposes
+      port_writeonly = 21376
+      server_writeonly = "localhost:#{port_writeonly}"
+      options_writeonly = { :servers_writeonly => server_writeonly }
+      memcached_server(port_writeonly)
+
+      memcached_persistent(21345, options_writeonly) do |dc|
+        # dc is now the dalli client that talks to both rings
+        dc.flush
+
+        val1 = "1234567890"*105000
+        assert_equal false, dc.set('a', val1)
+
+        val1 = "1234567890"*100000
+        dc.set('a', val1)
+        val2 = dc.get('a')
+        assert_equal val1, val2
+
+        dc2 = Dalli::Client.new([server_writeonly])
+        val3 = dc2.get('a')
+        assert_equal val2, val3
+
+        assert op_addset_succeeds(dc.set('a', nil))
+        assert_nil dc.get('a')
+
+        val4 = dc2.get('a')
+        assert_nil val4
+      end
+    end
+
     it 'supports delete' do
       memcached_persistent do |dc|
         dc.set('some_key', 'some_value')
