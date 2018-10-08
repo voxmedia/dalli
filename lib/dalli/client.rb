@@ -409,7 +409,7 @@ module Dalli
     end
 
     def is_read?(op)
-      [:get, :cas].includes?(op)
+      [:get, :cas].include?(op)
     end
 
     def validate_key(key)
