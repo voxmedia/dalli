@@ -1,6 +1,10 @@
 Dalli Changelog
 =====================
 
+2.7.10
+==========
+- fix writeonly bug
+
 2.7.9
 ==========
 - writeonly ring
