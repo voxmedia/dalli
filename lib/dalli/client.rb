@@ -29,11 +29,12 @@ module Dalli
     # - :serializer - defaults to Marshal
     # - :compressor - defaults to zlib
     # - :cache_nils - defaults to false, if true Dalli will not treat cached nil values as 'not found' for #fetch operations.
+    # - :digest_class - defaults to Digest::MD5, allows you to pass in an object that responds to the hexdigest method, useful for injecting a FIPS compliant hash object.
     # - :servers_writeonly - same format as servers, but the servers in this Array will only be sent writes, not reads. Default: nil
     # - :fraction_writeonly - random chance (0-1) that a write will also be sent to servers_writeonly. Default: 1
     #
-    #
     def initialize(servers=nil, options={})
+      options[:digest_class] = ::Digest::MD5 unless options[:digest_class]
       @servers = normalize_servers(servers || ENV["MEMCACHE_SERVERS"] || '127.0.0.1:11211')
       @servers_writeonly  = normalize_servers_writeonly( options.delete(:servers_writeonly))
       @fraction_writeonly = normalize_fraction_writeonly(options.delete(:fraction_writeonly))
@@ -384,7 +385,9 @@ module Dalli
         server_options[:password] = uri.password
         s = "#{uri.host}:#{uri.port}"
       end
-      [s, @options.merge(server_options)]
+      options = @options.dup.merge(server_options)
+      options.delete(:digest_class)
+      [s, options]
     end
 
     # Chokepoint method for instrumentation
@@ -422,7 +425,7 @@ module Dalli
       key = key_with_namespace(key)
       if key.length > 250
         max_length_before_namespace = 212 - (namespace || '').size
-        key = "#{key[0, max_length_before_namespace]}:md5:#{Digest::MD5.hexdigest(key)}"
+        key = "#{key[0, max_length_before_namespace]}:md5:#{@options[:digest_class].hexdigest(key)}"
       end
       return key
     end
@@ -449,6 +452,9 @@ module Dalli
         opts[:expires_in] = opts[:expires_in].to_i if opts[:expires_in]
       rescue NoMethodError
         raise ArgumentError, "cannot convert :expires_in => #{opts[:expires_in].inspect} to an integer"
+      end
+      unless opts[:digest_class].respond_to? :hexdigest
+        raise ArgumentError, "The digest_class object must respond to the hexdigest method"
       end
       opts
     end

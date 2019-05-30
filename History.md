@@ -9,8 +9,8 @@ NEXT VERSION
 ==========
 - Revert frozen string change (schneems)
 - Advertise supports_cached_versioning? in DalliStore (schneems)
-- Better detection of fork support, to allow specs to run under Truffle Ruby
-- Update logging for over max size to log as error
+- Better detection of fork support, to allow specs to run under Truffle Ruby (deepj)
+- Update logging for over max size to log as error (aeroastro)
 
 2.7.9
 ==========
