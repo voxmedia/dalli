@@ -1,6 +1,10 @@
 Dalli Changelog
 =====================
 
+NEXT VERSION
+==========
+- Enable writeonly ring
+
 2.7.10
 ==========
 - Revert frozen string change (schneems)
