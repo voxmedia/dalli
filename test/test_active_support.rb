@@ -9,9 +9,21 @@ class MockUser
   end
 end
 
+class MockUserVersioning
+  def cache_key_with_version
+    "users/1/241012793847982434"
+  end
+end
+
 class ObjectRaisingEquality
   def ==(other)
     raise "Equality called on fetched object."
+  end
+end
+
+class MyToParamIsFrozen
+  def to_param
+    "frozen".freeze
   end
 end
 
@@ -77,6 +89,14 @@ describe 'ActiveSupport::Cache::DalliStore' do
         @dalli.fetch('obj') { obj }
       end
 
+      it_with_and_without_local_cache 'fallback block gets a key as a parameter' do
+        key = rand_key
+        o = Object.new
+        o.instance_variable_set :@foo, 'bar'
+        dvalue = @dalli.fetch(key) { |k| "#{k}-#{o}" }
+        assert_equal "#{key}-#{o}", dvalue
+      end
+
       it_with_and_without_local_cache 'support object' do
         o = Object.new
         o.instance_variable_set :@foo, 'bar'
@@ -116,6 +136,13 @@ describe 'ActiveSupport::Cache::DalliStore' do
       it_with_and_without_local_cache 'support object with cache_key' do
         user = MockUser.new
         @dalli.write(user.cache_key, false)
+        dvalue = @dalli.fetch(user) { flunk }
+        assert_equal false, dvalue
+      end
+
+      it_with_and_without_local_cache 'support object with cache_key_with_version' do
+        user = MockUserVersioning.new
+        @dalli.write(user.cache_key_with_version, false)
         dvalue = @dalli.fetch(user) { flunk }
         assert_equal false, dvalue
       end
@@ -183,6 +210,18 @@ describe 'ActiveSupport::Cache::DalliStore' do
 
           assert_equal({ x => '123', y => 456}, @dalli.read_multi(x, y))
         end
+      end
+    end
+
+    it 'supports frozen strings' do
+      with_cache do
+        @dalli.read(["foo".freeze])
+      end
+    end
+
+    it 'supports frozen strings in more contrived scenarios' do
+      with_cache do
+        @dalli.read(MyToParamIsFrozen.new)
       end
     end
 

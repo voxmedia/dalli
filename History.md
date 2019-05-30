@@ -1,9 +1,22 @@
 Dalli Changelog
 =====================
 
+NEXT VERSION
+==========
+- Enable writeonly ring
+
+2.7.10
+==========
+- Revert frozen string change (schneems)
+- Advertise supports_cached_versioning? in DalliStore (schneems)
+- Better detection of fork support, to allow specs to run under Truffle Ruby
+- Update logging for over max size to log as error
+
 2.7.9
 ==========
-- writeonly ring
+- Fix behavior for Rails 5.2+ cache_versioning (GriwMF)
+- Ensure fetch provides the key to the fallback block as an argument (0exp)
+- Assorted performance improvements (schneems)
 
 2.7.8
 ==========
