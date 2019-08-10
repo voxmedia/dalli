@@ -129,6 +129,16 @@ describe 'ActiveSupport::Cache::DalliStore' do
         assert_equal false, dvalue
       end
 
+      it 'fetch defaults to treating cached nil as not found' do
+        with_cache do
+          @dalli.write('nil_default', nil)
+          executed = false
+          dvalue = @dalli.fetch('nil_default') { executed = true; 'quux' }
+          assert executed, "by default nil means not found"
+          assert_equal 'quux', dvalue
+        end
+      end
+
       it 'support nil value when cache_nils: true' do
         with_cache cache_nils: true do
           @dalli.write('nil', nil)

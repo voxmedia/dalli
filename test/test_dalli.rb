@@ -102,6 +102,16 @@ describe 'Dalli' do
     assert_equal s2, s3
   end
 
+  it "get stores and retrieves nil normally" do
+    memcached_persistent do |dc|
+      dc.set('nil', nil)
+      executed = false
+      val = dc.get('nil') { executed = true; 'quux' }
+      refute executed, "by default nil is just nil"
+      assert_nil val
+    end
+  end
+
   it "accept comma separated string" do
     dc = Dalli::Client.new("server1.example.com:11211,server2.example.com:11211")
     ring = dc.send(:ring)
@@ -235,6 +245,17 @@ describe 'Dalli' do
         dc.set("fetch_key", false)
         res = dc.fetch("fetch_key") { flunk "fetch block called" }
         assert_equal false, res
+      end
+    end
+
+    it "support fetch with nil by default" do
+      memcached_persistent(21345) do |dc|
+        dc.flush
+        dc.set("fetch_key", nil)
+        executed = false
+        res = dc.fetch("fetch_key") { executed = true; 'quux' }
+        assert_equal 'quux', res
+        assert_equal true, executed
       end
     end
 
