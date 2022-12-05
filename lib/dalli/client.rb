@@ -387,7 +387,6 @@ module Dalli
         s = "#{uri.host}:#{uri.port}"
       end
       options = @options.dup.merge(server_options)
-      options.delete(:digest_class)
       [s, options]
     end
 
