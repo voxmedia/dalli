@@ -146,6 +146,14 @@ describe 'Dalli' do
     assert_equal 1.0, frac
   end
 
+  it "know what a read op is" do
+    dc = Dalli::Client.new("server1.example.com:11211",
+                           :fraction_writeonly => 0.5)
+    assert dc.send(:is_read?, :get)
+    assert dc.send(:is_read?, :cas)
+    refute dc.send(:is_read?, :set)
+  end
+
   describe 'using a live server' do
 
     it "support get/set" do
