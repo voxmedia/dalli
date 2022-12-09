@@ -120,6 +120,40 @@ describe 'Dalli' do
     assert_equal "server2.example.com", s2
   end
 
+  it "accept writeonly ring" do
+    dc = Dalli::Client.new("server1.example.com:11211",
+                           :servers_writeonly => "server2.example.com:11211,server3.example.com:11211")
+    ring = dc.send(:ring)
+    assert_equal 1, ring.servers.size
+    ring_writeonly = dc.send(:ring_writeonly)
+    assert_equal 2, ring_writeonly.servers.size
+    s1,s2 = ring_writeonly.servers.map(&:hostname)
+    assert_equal "server2.example.com", s1
+    assert_equal "server3.example.com", s2
+    options = dc.instance_variable_get('@options')
+    assert_equal({}, options)
+  end
+
+  it "accept writeonly fraction" do
+    dc = Dalli::Client.new("server1.example.com:11211",
+                           :fraction_writeonly => 0.5)
+    frac = dc.instance_variable_get('@fraction_writeonly')
+    assert_equal 0.5, frac
+    options = dc.instance_variable_get('@options')
+    assert_equal({}, options)
+    dc = Dalli::Client.new("server1.example.com:11211")
+    frac = dc.instance_variable_get('@fraction_writeonly')
+    assert_equal 1.0, frac
+  end
+
+  it "know what a read op is" do
+    dc = Dalli::Client.new("server1.example.com:11211",
+                           :fraction_writeonly => 0.5)
+    assert dc.send(:is_read?, :get)
+    assert dc.send(:is_read?, :cas)
+    refute dc.send(:is_read?, :set)
+  end
+
   describe 'using a live server' do
 
     it "support get/set" do
@@ -477,36 +511,6 @@ describe 'Dalli' do
       end
     end
 
-    it 'allow TCP connections to configure SO_RCVBUF' do
-      memcached_persistent do |dc, port|
-        value = 5000
-        dc = Dalli::Client.new("localhost:#{port}", :rcvbuf => value)
-        dc.set(:a, 1)
-        ring = dc.send(:ring)
-        server = ring.servers.first
-        socket = server.instance_variable_get('@sock')
-
-        optval = socket.getsockopt(Socket::SOL_SOCKET, Socket::SO_RCVBUF)
-        expected = jruby? ? value : value * 2
-        assert_equal expected, optval.unpack('i')[0]
-      end
-    end
-
-    it 'allow TCP connections to configure SO_SNDBUF' do
-      memcached_persistent do |dc, port|
-        value = 5000
-        dc = Dalli::Client.new("localhost:#{port}", :sndbuf => value)
-        dc.set(:a, 1)
-        ring = dc.send(:ring)
-        server = ring.servers.first
-        socket = server.instance_variable_get('@sock')
-
-        optval = socket.getsockopt(Socket::SOL_SOCKET, Socket::SO_SNDBUF)
-        expected = jruby? ? value : value * 2
-        assert_equal expected, optval.unpack('i')[0]
-      end
-    end
-
     it "pass a simple smoke test" do
       memcached_persistent do |dc, port|
         resp = dc.flush
@@ -739,13 +743,13 @@ describe 'Dalli' do
       it 'handle error response correctly' do
         memcached_low_mem_persistent do |dc|
           failed = false
-          value = "1234567890"*100
+          value = "1234567890"*1000
           1_000.times do |idx|
             begin
               assert op_addset_succeeds(dc.set(idx, value))
             rescue Dalli::DalliError
               failed = true
-              assert((800..960).include?(idx), "unexpected failure on iteration #{idx}")
+              assert((10..200).include?(idx), "unexpected failure on iteration #{idx}")
               break
             end
           end
@@ -757,13 +761,13 @@ describe 'Dalli' do
         memcached_low_mem_persistent do |dc, port|
           dalli = Dalli::Client.new("localhost:#{port}", :compress => true)
           failed = false
-          value = "1234567890"*1000
+          value = "1234567890"*100
           10_000.times do |idx|
             begin
               assert op_addset_succeeds(dalli.set(idx, value))
             rescue Dalli::DalliError
               failed = true
-              assert((6000..7800).include?(idx), "unexpected failure on iteration #{idx}")
+              assert((800..2000).include?(idx), "unexpected failure on iteration #{idx}")
               break
             end
           end

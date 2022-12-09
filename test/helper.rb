@@ -5,7 +5,7 @@ require 'bundler/setup'
 # SimpleCov.start
 require 'minitest/pride' unless RUBY_ENGINE == 'rbx'
 require 'minitest/autorun'
-require 'mocha/setup'
+require 'mocha/minitest'
 require_relative 'memcached_mock'
 
 ENV['MEMCACHED_SASL_PWDB'] = "#{File.dirname(__FILE__)}/sasl/sasldb"
@@ -42,18 +42,6 @@ class MiniTest::Spec
   # add and set must have the same return value because of DalliStore#write_entry
   def op_addset_succeeds(rsp)
     rsp.is_a?(Integer) && rsp > 0
-  end
-
-  def with_activesupport
-    require 'active_support/all'
-    require 'active_support/cache/dalli_store'
-    yield
-  end
-
-  def with_actionpack
-    require 'action_dispatch'
-    require 'action_controller'
-    yield
   end
 
   def with_connectionpool

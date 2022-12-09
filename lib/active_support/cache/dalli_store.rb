@@ -50,6 +50,11 @@ module ActiveSupport
       # wish to use pool support.
       #
       def initialize(*addresses)
+        puts <<-EOS
+DEPRECATION: :dalli_store will be removed in Dalli 3.0.
+Please use Rails' official :mem_cache_store instead.
+https://guides.rubyonrails.org/caching_with_rails.html
+EOS
         addresses = addresses.flatten
         options = addresses.extract_options!
         @options = options.dup
@@ -341,11 +346,12 @@ module ActiveSupport
       private
 
       def namespaced_key(key, options)
+        digest_class = @options[:digest_class] || ::Digest::MD5
         key = expanded_key(key)
         namespace = options[:namespace] if options
         prefix = namespace.is_a?(Proc) ? namespace.call : namespace
         key = "#{prefix}:#{key}" if prefix
-        key = "#{key[0, 213]}:md5:#{@options[:digest_class].hexdigest(key)}" if key && key.size > 250
+        key = "#{key[0, 213]}:md5:#{digest_class.hexdigest(key)}" if key && key.size > 250
         key
       end
       alias :normalize_key :namespaced_key
@@ -417,7 +423,7 @@ module ActiveSupport
       module LocalCacheEntryUnwrapAndRaw # :nodoc:
         protected
           def read_entry(key, options)
-            retval = super
+            retval = super(key, **options)
             if retval.is_a? ActiveSupport::Cache::Entry
               # Must have come from LocalStore, unwrap it
               if options[:raw]

@@ -30,12 +30,16 @@ module Dalli
     # - :compressor - defaults to zlib
     # - :cache_nils - defaults to false, if true Dalli will not treat cached nil values as 'not found' for #fetch operations.
     # - :digest_class - defaults to Digest::MD5, allows you to pass in an object that responds to the hexdigest method, useful for injecting a FIPS compliant hash object.
+    # - :servers_writeonly - same format as servers, but the servers in this Array will only be sent writes, not reads. Default: nil
+    # - :fraction_writeonly - random chance (0-1) that a write will also be sent to servers_writeonly. Default: 1
     #
     def initialize(servers=nil, options={})
-      options[:digest_class] = ::Digest::MD5 unless options[:digest_class]
       @servers = normalize_servers(servers || ENV["MEMCACHE_SERVERS"] || '127.0.0.1:11211')
+      @servers_writeonly  = normalize_servers_writeonly( options.delete(:servers_writeonly))
+      @fraction_writeonly = normalize_fraction_writeonly(options.delete(:fraction_writeonly))
       @options = normalize_options(options)
       @ring = nil
+      @ring_writeonly = nil
     end
 
     #
@@ -333,31 +337,57 @@ module Dalli
 
     ##
     # Normalizes the argument into an array of servers.
-    # If the argument is a string, it's expected that the URIs are comma separated e.g.
+    # If the argument is a string, or an array containing strings, it's expected that the URIs are comma separated e.g.
     # "memcache1.example.com:11211,memcache2.example.com:11211,memcache3.example.com:11211"
     def normalize_servers(servers)
-      if servers.is_a? String
-        return servers.split(",")
-      else
-        return servers
+      Array(servers).flat_map do |server|
+        if server.is_a? String
+          server.split(",")
+        else
+          server
+        end
       end
+    end
+
+    def normalize_servers_writeonly(servers)
+      servers.blank? ? nil : normalize_servers(servers)
+    end
+
+    def normalize_fraction_writeonly(fraction)
+      [[0.0, fraction.nil? ? 1.0 : fraction.to_f].max, 1.0].min
     end
 
     def ring
       @ring ||= Dalli::Ring.new(
         @servers.map do |s|
-         server_options = {}
-          if s =~ %r{\Amemcached://}
-            uri = URI.parse(s)
-            server_options[:username] = uri.user
-            server_options[:password] = uri.password
-            s = "#{uri.host}:#{uri.port}"
-          end
-          options = @options.dup.merge(server_options)
-          options.delete(:digest_class)
-          Dalli::Server.new(s, options)
+          Dalli::Server.new(*server_options(s))
         end, @options
       )
+    end
+
+    def ring_writeonly
+      @ring_writeonly ||=
+        if @servers_writeonly.blank?
+          nil
+        else
+          Dalli::Ring.new(
+            @servers_writeonly.map do |s|
+              Dalli::Server.new(*server_options(s))
+            end, @options
+          )
+        end
+    end
+
+    def server_options(s)
+      server_options = {}
+      if s =~ %r{\Amemcached://}
+        uri = URI.parse(s)
+        server_options[:username] = uri.user
+        server_options[:password] = uri.password
+        s = "#{uri.host}:#{uri.port}"
+      end
+      options = @options.dup.merge(server_options)
+      [s, options]
     end
 
     # Chokepoint method for instrumentation
@@ -370,6 +400,14 @@ module Dalli
       begin
         server = ring.server_for_key(key)
         ret = server.request(op, key, *args)
+        if ring_writeonly && ! is_read?(op) && rand < @fraction_writeonly
+          begin
+            server = ring_writeonly.server_for_key(key)
+            server.request(op, key, *args)
+          rescue NetworkError => e
+            Dalli.logger.debug { "writeonly request raised #{e.inspect}, ignoring" }
+          end
+        end
         ret
       rescue NetworkError => e
         Dalli.logger.debug { e.inspect }
@@ -378,12 +416,17 @@ module Dalli
       end
     end
 
+    def is_read?(op)
+      [:get, :cas].include?(op)
+    end
+
     def validate_key(key)
       raise ArgumentError, "key cannot be blank" if !key || key.length == 0
       key = key_with_namespace(key)
       if key.length > 250
+        digest_class = @options[:digest_class] || ::Digest::MD5
         max_length_before_namespace = 212 - (namespace || '').size
-        key = "#{key[0, max_length_before_namespace]}:md5:#{@options[:digest_class].hexdigest(key)}"
+        key = "#{key[0, max_length_before_namespace]}:md5:#{digest_class.hexdigest(key)}"
       end
       return key
     end
@@ -411,7 +454,7 @@ module Dalli
       rescue NoMethodError
         raise ArgumentError, "cannot convert :expires_in => #{opts[:expires_in].inspect} to an integer"
       end
-      unless opts[:digest_class].respond_to? :hexdigest
+      if opts[:digest_class] && !opts[:digest_class].respond_to?(:hexdigest)
         raise ArgumentError, "The digest_class object must respond to the hexdigest method"
       end
       opts

@@ -59,7 +59,16 @@ describe 'ActiveSupport::Cache::DalliStore' do
 
     it 'uses valid digest_class option' do
       with_cache :expires_in => 5.minutes, :digest_class => OpenSSL::Digest::SHA1 do
-        dvalue = @dalli.fetch('a_key') { 123 }
+        key = "k" * 300
+        dvalue = @dalli.fetch(key) { 123 }
+        assert_equal 123, dvalue
+      end
+    end
+
+    it 'uses a fallback digest_class' do
+      with_cache :expires_in => 5.minutes do
+        key = "k" * 300
+        dvalue = @dalli.fetch(key) { 123 }
         assert_equal 123, dvalue
       end
     end
@@ -79,9 +88,9 @@ describe 'ActiveSupport::Cache::DalliStore' do
       assert_equal 'bar', @dalli.read('foo', nil)
       assert_equal 18, @dalli.fetch('lkjsadlfk', nil) { 18 }
       assert_equal 18, @dalli.fetch('lkjsadlfk', nil) { 18 }
-      assert_equal 1, @dalli.increment('lkjsa', 1, nil)
-      assert_equal 2, @dalli.increment('lkjsa', 1, nil)
-      assert_equal 1, @dalli.decrement('lkjsa', 1, nil)
+      assert_equal 1, @dalli.increment('lkjsa', 1)
+      assert_equal 2, @dalli.increment('lkjsa', 1)
+      assert_equal 1, @dalli.decrement('lkjsa', 1)
       assert_equal true, @dalli.delete('lkjsa')
     end
 
@@ -537,6 +546,16 @@ describe 'ActiveSupport::Cache::DalliStore' do
     assert_equal 1, @dalli.instance_variable_get(:@data).instance_variable_get(:@options)[:expires_in]
     assert_equal 'foo', @dalli.instance_variable_get(:@data).instance_variable_get(:@options)[:namespace]
     assert_equal ["127.0.0.1:11211"], @dalli.instance_variable_get(:@data).instance_variable_get(:@servers)
+  end
+
+  it 'normalizes servers passed in as comma separated' do
+    @dalli = ActiveSupport::Cache::DalliStore.new('server1:2,server3:4')
+    assert_equal ['server1:2', 'server3:4'], @dalli.instance_variable_get(:@data).instance_variable_get(:@servers)
+  end
+
+  it 'normalizes servers passed in as comma separated, nested in an array' do
+    @dalli = ActiveSupport::Cache::DalliStore.new(['server1:2,server3:4', 'server5:6'])
+    assert_equal ['server1:2', 'server3:4', 'server5:6'], @dalli.instance_variable_get(:@data).instance_variable_get(:@servers)
   end
 
   it 'supports connection pooling' do
